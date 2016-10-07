@@ -13,9 +13,25 @@ defmodule Nerves.Grove.LED do
       LED.blink(pid)
   """
 
+  @i2c_read_command  1
+  @i2c_write_command 2
+  @i2c_mode_command  5
+
   @spec start_link(pos_integer) :: {:ok, pid} | {:error, any}
   def start_link(pin) when is_integer(pin) do
-    Gpio.start_link(pin, :output)
+    pins = Application.get_env(:nerves_grove, :pins, [])
+    { _, type, extra } = Enum.find(pins, fn {pn,backend} -> pn == pin end) || {pin, :gpio}
+
+    case type do
+      :gpio ->
+        {success, pid} = Gpio.start_link(pin, :output)
+        {success, {pid, :gpio, pin}}
+      :i2c ->
+        { fname, address } = extra
+        with {:ok, pid} <- I2c.start_link(fname, address),
+             :ok <- I2c.write(pid, <<@i2c_mode_command, pin, 1, 0>>),
+           do: {:ok, {pid, :i2c, pin}}
+    end    
   end
 
   @doc "Blinks the LED for a specified duration."
@@ -28,14 +44,24 @@ defmodule Nerves.Grove.LED do
   end
 
   @doc "Switches on the LED."
-  @spec on(pid) :: any
-  def on(pid) when is_pid(pid) do
-    Gpio.write(pid, 1)
+  @spec on({pid,Keyword.T,pos_integer}) :: any
+  def on(data) when is_tuple(data) do
+    {pid, type, pin} = data
+    case type do
+      :gpio -> Gpio.write(pid, 1)
+      :i2c  -> I2c.write(pid, <<@i2c_write_command, pin, 1, 0>>)
+      _     -> {:error, "Invalid line type"}
+    end
   end
 
   @doc "Switches off the LED."
-  @spec off(pid) :: any
-  def off(pid) when is_pid(pid) do
-    Gpio.write(pid, 0)
+  @spec off({pid, Keyword.T, pos_integer}) :: any
+  def off(data) when is_tuple(data) do
+    {pid, type, pin} = data
+    case type do
+      :gpio -> Gpio.write(pin, 1)
+      :i2c  -> I2c.write(pid, <<@i2c_write_command, pin, 0, 0>>)
+      _     -> {:error, "Invalid line type"}
+    end
   end
 end
