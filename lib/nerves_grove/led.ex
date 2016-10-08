@@ -35,8 +35,8 @@ defmodule Nerves.Grove.LED do
   end
 
   @doc "Blinks the LED for a specified duration."
-  @spec blink(pid, number) :: any
-  def blink(pid, duration \\ 0.2) when is_pid(pid) and is_number(duration) do
+  @spec blink({pid, Keyword.T, pos_integer}, number) :: any
+  def blink(data, duration \\ 0.2) when is_tuple(data) and is_number(duration) do
     duration_in_ms = duration * 1000 |> round
     on(pid)
     :timer.sleep(duration_in_ms)
