@@ -8,9 +8,23 @@ defmodule Nerves.Grove.LED do
 
       alias Nerves.Grove.LED
 
-      {:ok, pid} = LED.start_link(pin)
+      {:ok, desc} = LED.start_link(pin)
 
-      LED.blink(pid)
+      LED.blink(desc)
+
+  # Configuration
+
+  Leds can be driven either directly by GPIOs or through and i2c bus.
+  Their configuration is specified as follows:
+
+      config :nerves_grove, ..., pins: [
+                                        {2, :gpio, {}},
+                                        {4, :i2c, {"i2c-1", 0x04}} ]
+
+  In the case of GPIOs, only the pin number along with the atom `:gpio` and
+  an empty tuple is necessary. In the case of i2c, the pin number, `:i2c`, and
+  a tuple containing the file name and i2c address of the controller chip are
+  necessary.
   """
 
   @i2c_digital_read_command  1
@@ -19,9 +33,11 @@ defmodule Nerves.Grove.LED do
 
   @spec start_link(pos_integer) :: {:ok, pid} | {:error, any}
   def start_link(pin) when is_integer(pin) do
+    # Look for the pin descriptor in the documentation. Assume GPIO otherwise.
     pins = Application.get_env(:nerves_grove, :pins, [])
     { _, type, extra } = Enum.find(pins, fn {pn,_,_} -> pn == pin end) || {pin, :gpio, nil}
 
+    # Depending on the "line" type, proceed to set the pin as an output GPIO.
     case type do
       :gpio ->
         {success, pid} = Gpio.start_link(pin, :output)
@@ -31,6 +47,7 @@ defmodule Nerves.Grove.LED do
         with {:ok, pid} <- I2c.start_link(fname, address),
              :ok <- I2c.write(pid, <<@i2c_mode_command, pin, 1, 0>>),
            do: {:ok, {pid, :i2c, pin}}
+      _ -> {:error, "Invalid type #{type}"}
     end    
   end
 
